@@ -1,3 +1,5 @@
+Based on: <https://docs.nvidia.com/nemo/megatron-bridge/0.2.0/training/distillation.html>
+
 ## Setup Steps
 
 **Note:** Set `$WORKSPACE` to your project root directory before running these commands:

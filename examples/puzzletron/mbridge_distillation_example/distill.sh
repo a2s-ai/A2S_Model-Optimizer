@@ -17,6 +17,7 @@
 #
 # Knowledge Distillation Training Script for Megatron-Bridge
 #
+# Based on: https://docs.nvidia.com/nemo/megatron-bridge/0.2.0/training/distillation.html
 # This script launches knowledge distillation training using torchrun.
 # It uses distill.py which loads models from Megatron-Bridge checkpoints.
 #

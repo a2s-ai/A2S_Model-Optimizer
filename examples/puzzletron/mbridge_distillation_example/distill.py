@@ -17,6 +17,8 @@
 """
 Knowledge Distillation Script for Puzzletron Models using Megatron-Bridge.
 
+Based on: https://docs.nvidia.com/nemo/megatron-bridge/0.2.0/training/distillation.html
+
 This script performs knowledge distillation using Megatron-Bridge checkpoints.
 It loads both student and teacher models from Megatron-Bridge checkpoint paths
 and supports YAML configuration files and CLI overrides.
