@@ -234,20 +234,16 @@ class HeterogeneousBridgeMixin:
 
         return ffn_config
 
-    def _build_heterogeneous_config_json(
-        self, hf_config, num_query_groups: int | None = None
-    ) -> str:
+    def _build_heterogeneous_config_json(self, hf_config) -> str:
         """Build the heterogeneous layers config JSON from HF config.
 
         Args:
             hf_config: HuggingFace model configuration
-            num_query_groups: Optional num_query_groups value (if not provided, extracted from config)
 
         Returns:
             JSON string for heterogeneous_layers_config_encoded_json
         """
-        if num_query_groups is None:
-            num_query_groups = self._extract_num_query_groups(hf_config)
+        num_query_groups = self._extract_num_query_groups(hf_config)
 
         hf_config_dict = json.loads(hf_config.to_json_string())
         mcore_block_configs = [
@@ -255,9 +251,7 @@ class HeterogeneousBridgeMixin:
             for block in hf_config_dict.get("block_configs", [])
         ]
 
-        # Build MCore format JSON
+        # Build MCore format JSON (only block_configs, rope_scaling is handled by provider fields)
         mcore_config = {"block_configs": mcore_block_configs}
-        if "rope_scaling" in hf_config_dict:
-            mcore_config["rope_scaling"] = hf_config_dict["rope_scaling"]
 
         return json.dumps(mcore_config, ensure_ascii=False)
