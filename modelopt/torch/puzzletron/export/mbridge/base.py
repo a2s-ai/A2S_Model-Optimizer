@@ -36,28 +36,13 @@ from megatron.core.transformer.spec_utils import ModuleSpec
 
 
 def heterogeneous_layer_spec(config) -> ModuleSpec:
-    """Determine the most appropriate layer specification based on availability.
-
-    Uses Transformer Engine specs since TE is a required dependency.
-
-    Args:
-        config: GPT configuration object
-
-    Returns:
-        ModuleSpec: The selected module specification
-    """
+    """Get GPT heterogeneous layer spec using Transformer Engine."""
     return get_gpt_heterogeneous_layer_spec(config, use_te=True)
 
 
 @dataclass
 class GenericHeterogeneousProvider(GPTModelProvider, HeterogeneousTransformerConfig):
-    """
-    Generic provider for heterogeneous (AnyModel) checkpoints.
-
-    This provider is model-agnostic and works with any model architecture
-    (Llama, Qwen3, Mistral, etc.) that uses block_configs for heterogeneous
-    layer specifications. Model-specific settings should be provided via kwargs.
-    """
+    """Generic provider for AnyModel checkpoints with block_configs."""
 
     # Heterogeneous configuration fields
     heterogeneous_layers_config_path: str | None = None
@@ -66,55 +51,19 @@ class GenericHeterogeneousProvider(GPTModelProvider, HeterogeneousTransformerCon
 
 
 class HeterogeneousBridgeMixin:
-    """
-    Mixin class for bridges that support heterogeneous layer architectures.
+    """Mixin for bridges supporting heterogeneous layer architectures (block_configs).
 
-    Provides shared functionality for handling models with block_configs (heterogeneous
-    layer configurations where each layer can have different dimensions, attention heads, etc.).
-    This is a mixin - it must be used with multiple inheritance alongside a model-specific
-    bridge (e.g., LlamaBridge, Qwen3Bridge). The mixin calls super() to access methods
-    from the model-specific bridge via Python's Method Resolution Order (MRO).
-
-    Example:
-        class PuzzletronLlamaAnyModelBridge(HeterogeneousBridgeMixin, LlamaBridge):
-            pass
+    Must be used with multiple inheritance alongside a model-specific bridge.
+    Example: class PuzzletronLlamaAnyModelBridge(HeterogeneousBridgeMixin, LlamaBridge)
     """
 
     def provider_bridge(self, hf_pretrained: PreTrainedCausalLM) -> GPTModelProvider:
-        """Convert HuggingFace AnyModel config to Megatron GPTModelProvider.
-
-        Reuses the parent bridge's provider_bridge() to get all model-specific settings,
-        then extends it with heterogeneous layer configuration (block_configs).
-
-        This method works for any model bridge that inherits from both a model-specific
-        bridge (e.g., LlamaBridge, Qwen3Bridge) and this base class.
-
-        Args:
-            hf_pretrained: HuggingFace PreTrainedCausalLM containing the model config
-
-        Returns:
-            GenericHeterogeneousProvider configured for AnyModel architecture
-        """
-
-        # Get fully configured provider from parent bridge (includes all model-specific settings)
-        # This calls the parent's provider_bridge() method (e.g., LlamaBridge.provider_bridge())
-        # via Python's Method Resolution Order (MRO). The mixin doesn't inherit from
-        # MegatronModelBridge, but super() finds the method in the other parent class.
-        # Note: mypy can't verify this, but it works correctly at runtime.
+        """Convert HF AnyModel config to Megatron GPTModelProvider."""
         parent_provider = super().provider_bridge(hf_pretrained)  # type: ignore[misc]
-
-        # Convert provider to dict (captures ALL fields automatically, no duplication)
         provider_kwargs = dataclasses.asdict(parent_provider)
-
-        # Add heterogeneous layer configuration (block_configs)
-        # Reuse the base class method to avoid duplicating the conversion logic
-        # The method will extract num_query_groups from config if not provided
-        hf_config = hf_pretrained.config
         provider_kwargs["heterogeneous_layers_config_encoded_json"] = (
-            self._build_heterogeneous_config_json(hf_config)
+            self._build_heterogeneous_config_json(hf_pretrained.config)
         )
-
-        # Create heterogeneous provider with all settings from parent + heterogeneous config
         return GenericHeterogeneousProvider(**provider_kwargs)
 
     @classmethod
@@ -125,57 +74,28 @@ class HeterogeneousBridgeMixin:
         )
 
     def _build_heterogeneous_config_json(self, hf_config) -> str:
-        """Build the heterogeneous layers config JSON from HF config.
-
-        Args:
-            hf_config: HuggingFace model configuration
-
-        Returns:
-            JSON string for heterogeneous_layers_config_encoded_json
-        """
-        # For anymodel checkpoints, blocks always have num_key_value_heads in their attention config
+        """Build heterogeneous layers config JSON from HF config."""
         hf_config_dict = json.loads(hf_config.to_json_string())
         mcore_block_configs = [
             self._convert_block_config(block) for block in hf_config_dict["block_configs"]
         ]
-
-        # Build MCore format JSON (only block_configs, rope_scaling is handled by provider fields)
-        mcore_config = {"block_configs": mcore_block_configs}
-
-        return json.dumps(mcore_config, ensure_ascii=False)
+        return json.dumps({"block_configs": mcore_block_configs}, ensure_ascii=False)
 
     def _convert_block_config(self, block: dict) -> dict:
         """Convert a single block config from HF format to MCore format."""
-        # For anymodel checkpoints, attention and ffn are always present and not None
-        mcore_block = {
+        return {
             "attention": self._convert_attention_config(block["attention"]),
             "ffn": self._convert_ffn_config(block["ffn"]),
         }
 
-        return mcore_block
-
     def _convert_attention_config(self, attention_config: dict) -> dict:
         """Convert attention config from HF format to MCore format."""
-        # For anymodel checkpoints, attention_config is always a dict
         attention_config = attention_config.copy()
-
-        # Convert num_key_value_heads (AnyModel format) to num_query_groups (MCore format)
-        # For anymodel checkpoints, num_key_value_heads always exists and is not None
         attention_config["num_query_groups"] = attention_config.pop("num_key_value_heads")
-
-        # Ensure required fields are set
-        attention_config.setdefault("no_op", False)
-        attention_config.setdefault("replace_with_linear", False)
-
         return attention_config
 
     def _convert_ffn_config(self, ffn_config: dict) -> dict:
         """Convert FFN/MLP config from HF format to MCore format."""
-        # For anymodel checkpoints, ffn_config is always a dict
         ffn_config = ffn_config.copy()
-
-        # Convert intermediate_size to ffn_hidden_size (MCore expects this)
-        # For anymodel checkpoints, intermediate_size always exists and is not None
         ffn_config["ffn_hidden_size"] = ffn_config.pop("intermediate_size")
-
         return ffn_config
