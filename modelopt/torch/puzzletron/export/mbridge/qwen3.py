@@ -21,11 +21,11 @@ from megatron.bridge.models.qwen.qwen3_bridge import Qwen3Bridge
 from megatron.core.models.gpt.gpt_model import GPTModel
 from transformers import Qwen3ForCausalLM
 
-from modelopt.torch.puzzletron.export.mbridge.base import PuzzletronAnyModelBridgeMixin
+from modelopt.torch.puzzletron.export.mbridge.base import HeterogeneousBridgeMixin
 
 
 @MegatronModelBridge.register_bridge(source=Qwen3ForCausalLM, target=GPTModel, model_type="qwen3")
-class PuzzletronQwen3AnyModelBridge(PuzzletronAnyModelBridgeMixin, Qwen3Bridge):
+class PuzzletronQwen3AnyModelBridge(HeterogeneousBridgeMixin, Qwen3Bridge):
     """
     Megatron Bridge for Puzzletron Qwen3-based AnyModel checkpoints.
 
@@ -33,6 +33,6 @@ class PuzzletronQwen3AnyModelBridge(PuzzletronAnyModelBridgeMixin, Qwen3Bridge):
     All Qwen3-specific settings are inherited from Qwen3Bridge.
     """
 
-    # provider_bridge() is inherited from PuzzletronAnyModelBridgeMixin
+    # provider_bridge() is inherited from HeterogeneousBridgeMixin
     # It automatically reuses Qwen3Bridge.provider_bridge() and adds heterogeneous config
     # mapping_registry() is inherited from Qwen3Bridge

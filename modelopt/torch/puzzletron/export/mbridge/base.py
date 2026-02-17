@@ -66,17 +66,18 @@ class GenericHeterogeneousProvider(GPTModelProvider, HeterogeneousTransformerCon
     transformer_layer_spec: ModuleSpec | Callable = heterogeneous_layer_spec
 
 
-class PuzzletronAnyModelBridgeMixin:
+class HeterogeneousBridgeMixin:
     """
-    Mixin class for Puzzletron AnyModel bridges.
+    Mixin class for bridges that support heterogeneous layer architectures.
 
-    Provides shared functionality for handling AnyModel checkpoints with block_configs.
+    Provides shared functionality for handling models with block_configs (heterogeneous
+    layer configurations where each layer can have different dimensions, attention heads, etc.).
     This is a mixin - it must be used with multiple inheritance alongside a model-specific
     bridge (e.g., LlamaBridge, Qwen3Bridge). The mixin calls super() to access methods
     from the model-specific bridge via Python's Method Resolution Order (MRO).
 
     Example:
-        class PuzzletronLlamaAnyModelBridge(PuzzletronAnyModelBridgeMixin, LlamaBridge):
+        class PuzzletronLlamaAnyModelBridge(HeterogeneousBridgeMixin, LlamaBridge):
             pass
     """
 
