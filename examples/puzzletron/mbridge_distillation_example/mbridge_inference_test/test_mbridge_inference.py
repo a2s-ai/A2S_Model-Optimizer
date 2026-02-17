@@ -34,6 +34,7 @@ Usage:
      export PYTHONPATH="/workspace/Megatron-Bridge/src:/workspace/Model-Optimizer:${PYTHONPATH}"
      python test_mbridge_inference.py /workspace/puzzle_dir_decilm/ckpts/teacher
      python test_mbridge_inference.py /workspace/puzzle_dir_anymodel/ckpts/teacher
+     python test_mbridge_inference.py /workspace/puzzle_dir_anymodel_qwen3_8b/ckpts/teacher
 
      Or with torchrun for multi-GPU:
      torchrun --nproc_per_node=1 test_mbridge_inference.py /workspace/puzzle_dir_decilm/ckpts/teacher
@@ -51,6 +52,7 @@ sys.path.insert(0, str(parent_dir / "anymodel_model_distillation"))
 # Import AnyModel bridge to register it (so LlamaBridge is not used for AnyModel)
 import llama_anymodel_bridge  # noqa: F401, E402
 import puzzletron_decilm_bridge  # noqa: F401, E402
+import qwen3_anymodel_bridge  # noqa: F401, E402
 import torch  # noqa: E402
 from megatron.bridge.models.conversion.auto_bridge import AutoBridge  # noqa: E402
 from megatron.bridge.models.conversion.model_bridge import get_model_bridge  # noqa: E402
