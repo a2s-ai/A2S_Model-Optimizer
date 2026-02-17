@@ -36,11 +36,10 @@ import json
 import logging
 
 import torch
-from megatron.bridge.models.conversion.mapping_registry import MegatronMappingRegistry
 from megatron.bridge.models.conversion.model_bridge import MegatronModelBridge
-from megatron.bridge.models.conversion.param_mapping import AutoMapping, GatedMLPMapping, QKVMapping
 from megatron.bridge.models.gpt_provider import GPTModelProvider
 from megatron.bridge.models.hf_pretrained.causal_lm import PreTrainedCausalLM
+from megatron.bridge.models.llama.llama_bridge import LlamaBridge
 from megatron.bridge.models.llama_nemotron.llama_nemotron_provider import (
     LlamaNemotronHeterogeneousProvider,
 )
@@ -51,7 +50,7 @@ logger = logging.getLogger(__name__)
 
 
 @MegatronModelBridge.register_bridge(source=LlamaForCausalLM, target=GPTModel, model_type="llama")
-class PuzzletronLlamaAnyModelBridge(MegatronModelBridge):
+class PuzzletronLlamaAnyModelBridge(LlamaBridge):
     """
     Megatron Bridge for Puzzletron Llama-based AnyModel checkpoints.
 
@@ -70,7 +69,7 @@ class PuzzletronLlamaAnyModelBridge(MegatronModelBridge):
 
         This bridge is registered for all LlamaForCausalLM models, but only handles
         AnyModel checkpoints (those with block_configs). For regular Llama models,
-        it delegates to the default LlamaBridge.
+        it delegates to the parent LlamaBridge.
 
         Args:
             hf_pretrained: HuggingFace PreTrainedCausalLM containing the Llama config
@@ -84,12 +83,8 @@ class PuzzletronLlamaAnyModelBridge(MegatronModelBridge):
         is_anymodel = hasattr(hf_config, "block_configs") and hf_config.block_configs
 
         if not is_anymodel:
-            # Not an AnyModel checkpoint - delegate to default LlamaBridge
-            from megatron.bridge.models.llama.llama_bridge import LlamaBridge
-
-            default_bridge = LlamaBridge()
-            default_bridge.hf_pretrained = hf_pretrained
-            return default_bridge.provider_bridge(hf_pretrained)
+            # Not an AnyModel checkpoint - delegate to parent LlamaBridge
+            return super().provider_bridge(hf_pretrained)
 
         # This is an AnyModel checkpoint - handle it with AnyModel-specific logic
         # Extract num_query_groups for heterogeneous models
@@ -256,66 +251,7 @@ class PuzzletronLlamaAnyModelBridge(MegatronModelBridge):
         Returns:
             Dictionary of HuggingFace LlamaConfig parameters
         """
-        raise NotImplementedError("megatron_to_hf_config() not yet implemented for Llama")
+        raise NotImplementedError("megatron_to_hf_config() not yet implemented for Llama AnyModel")
 
-    def mapping_registry(self) -> MegatronMappingRegistry:
-        """Define weight mappings between Llama AnyModel and Megatron formats.
-
-        Uses standard Llama-style mappings:
-        - QKV concatenation (q_proj, k_proj, v_proj -> linear_qkv)
-        - GatedMLP concatenation (gate_proj, up_proj -> linear_fc1)
-
-        AnyModel checkpoints use the same weight structure as standard Llama models,
-        so the mappings are identical.
-
-        Returns:
-            MegatronMappingRegistry containing Llama weight mappings
-        """
-        # Base mappings (same as standard LlamaBridge)
-        param_mappings = {
-            "embedding.word_embeddings.weight": "model.embed_tokens.weight",
-            "output_layer.weight": "lm_head.weight",
-            "decoder.final_layernorm.weight": "model.norm.weight",
-            # te implementation
-            "decoder.layers.*.self_attention.linear_qkv.layer_norm_weight": (
-                "model.layers.*.input_layernorm.weight"
-            ),
-            # local implementation
-            "decoder.layers.*.input_layernorm.weight": "model.layers.*.input_layernorm.weight",
-            # te implementation
-            "decoder.layers.*.mlp.linear_fc1.layer_norm_weight": (
-                "model.layers.*.post_attention_layernorm.weight"
-            ),
-            # local implementation
-            "decoder.layers.*.pre_mlp_layernorm.weight": (
-                "model.layers.*.post_attention_layernorm.weight"
-            ),
-            "decoder.layers.*.self_attention.linear_proj.weight": "model.layers.*.self_attn.o_proj.weight",
-            "decoder.layers.*.mlp.linear_fc2.weight": "model.layers.*.mlp.down_proj.weight",
-        }
-
-        mapping_list = []
-        # Convert each dictionary entry to AutoMapping(megatron_param, hf_param)
-        for megatron_param, hf_param in param_mappings.items():
-            mapping_list.append(AutoMapping(megatron_param=megatron_param, hf_param=hf_param))
-
-        # Add special mappings that require parameter concatenation/transformation
-        mapping_list.extend(
-            [
-                # QKV: Combine separate Q, K, V matrices into single QKV matrix
-                QKVMapping(
-                    megatron_param="decoder.layers.*.self_attention.linear_qkv.weight",
-                    q="model.layers.*.self_attn.q_proj.weight",
-                    k="model.layers.*.self_attn.k_proj.weight",
-                    v="model.layers.*.self_attn.v_proj.weight",
-                ),
-                # Gated MLP: Combine gate and up projection matrices into single FC1 matrix
-                GatedMLPMapping(
-                    megatron_param="decoder.layers.*.mlp.linear_fc1.weight",
-                    gate="model.layers.*.mlp.gate_proj.weight",
-                    up="model.layers.*.mlp.up_proj.weight",
-                ),
-            ]
-        )
-
-        return MegatronMappingRegistry(*mapping_list)
+    # mapping_registry() is inherited from LlamaBridge - no need to override
+    # since AnyModel checkpoints use the same weight structure as standard Llama models
