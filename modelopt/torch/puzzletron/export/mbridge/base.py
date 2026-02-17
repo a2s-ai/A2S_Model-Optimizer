@@ -133,12 +133,10 @@ class HeterogeneousBridgeMixin:
         Returns:
             JSON string for heterogeneous_layers_config_encoded_json
         """
-        num_query_groups = self._extract_num_query_groups(hf_config)
-
+        # For anymodel checkpoints, blocks always have num_key_value_heads in their attention config
         hf_config_dict = json.loads(hf_config.to_json_string())
         mcore_block_configs = [
-            self._convert_block_config(block, hf_config, num_query_groups)
-            for block in hf_config_dict.get("block_configs", [])
+            self._convert_block_config(block) for block in hf_config_dict["block_configs"]
         ]
 
         # Build MCore format JSON (only block_configs, rope_scaling is handled by provider fields)
@@ -146,71 +144,24 @@ class HeterogeneousBridgeMixin:
 
         return json.dumps(mcore_config, ensure_ascii=False)
 
-    def _extract_num_query_groups(self, hf_config) -> int | None:
-        """
-        Extract num_query_groups from global config or block_configs.
-
-        Note: num_query_groups in Megatron = num_key_value_heads in HF (they're the same).
-        The base class CONFIG_MAPPING already handles this, so we only need this for
-        extracting from block_configs when not in global config.
-        """
-        # Base class will handle global config via CONFIG_MAPPING, so we only
-        # need to extract from block_configs if not in global config
-        if hasattr(hf_config, "num_key_value_heads") and hf_config.num_key_value_heads is not None:
-            # Base class will handle this, return None to use base class value
-            return None
-
-        # Fall back to block_configs - extract num_key_value_heads from first valid block
-        for block in hf_config.block_configs:
-            if hasattr(block, "attention") and hasattr(block.attention, "num_key_value_heads"):
-                num_kv_heads = block.attention.num_key_value_heads
-                if num_kv_heads is not None:
-                    return num_kv_heads
-        return None
-
-    def _convert_block_config(
-        self, block: dict, hf_config, default_num_query_groups: int | None
-    ) -> dict:
+    def _convert_block_config(self, block: dict) -> dict:
         """Convert a single block config from HF format to MCore format."""
-        mcore_block = {}
-
-        # Process attention config
-        if "attention" in block and block["attention"] is not None:
-            mcore_block["attention"] = self._convert_attention_config(
-                block["attention"], hf_config, default_num_query_groups
-            )
-
-        # Process FFN/MLP config
-        ffn_key = block.get("ffn") or block.get("mlp")
-        if ffn_key:
-            mcore_block["ffn"] = self._convert_ffn_config(ffn_key)
+        # For anymodel checkpoints, attention and ffn are always present and not None
+        mcore_block = {
+            "attention": self._convert_attention_config(block["attention"]),
+            "ffn": self._convert_ffn_config(block["ffn"]),
+        }
 
         return mcore_block
 
-    def _convert_attention_config(
-        self, attention_config: dict, hf_config, default_num_query_groups: int | None
-    ) -> dict:
+    def _convert_attention_config(self, attention_config: dict) -> dict:
         """Convert attention config from HF format to MCore format."""
-        if isinstance(attention_config, dict):
-            attention_config = attention_config.copy()
-        else:
-            attention_config = {}
+        # For anymodel checkpoints, attention_config is always a dict
+        attention_config = attention_config.copy()
 
         # Convert num_key_value_heads (AnyModel format) to num_query_groups (MCore format)
-        if (
-            "num_key_value_heads" in attention_config
-            and attention_config["num_key_value_heads"] is not None
-        ):
-            attention_config["num_query_groups"] = attention_config["num_key_value_heads"]
-            attention_config.pop("num_key_value_heads", None)
-
-        # Set num_query_groups if missing
-        if "num_query_groups" not in attention_config:
-            if default_num_query_groups is not None:
-                attention_config["num_query_groups"] = default_num_query_groups
-            else:
-                # Default to MHA (no grouping)
-                attention_config["num_query_groups"] = hf_config.num_attention_heads
+        # For anymodel checkpoints, num_key_value_heads always exists and is not None
+        attention_config["num_query_groups"] = attention_config.pop("num_key_value_heads")
 
         # Ensure required fields are set
         attention_config.setdefault("no_op", False)
@@ -220,13 +171,11 @@ class HeterogeneousBridgeMixin:
 
     def _convert_ffn_config(self, ffn_config: dict) -> dict:
         """Convert FFN/MLP config from HF format to MCore format."""
-        if isinstance(ffn_config, dict):
-            ffn_config = ffn_config.copy()
-        else:
-            ffn_config = {}
+        # For anymodel checkpoints, ffn_config is always a dict
+        ffn_config = ffn_config.copy()
 
         # Convert intermediate_size to ffn_hidden_size (MCore expects this)
-        if "intermediate_size" in ffn_config and ffn_config["intermediate_size"] is not None:
-            ffn_config["ffn_hidden_size"] = ffn_config.pop("intermediate_size")
+        # For anymodel checkpoints, intermediate_size always exists and is not None
+        ffn_config["ffn_hidden_size"] = ffn_config.pop("intermediate_size")
 
         return ffn_config
