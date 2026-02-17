@@ -59,8 +59,11 @@ class HeterogeneousBridgeMixin:
 
     def provider_bridge(self, hf_pretrained: PreTrainedCausalLM) -> GPTModelProvider:
         """Convert HF AnyModel config to Megatron GPTModelProvider."""
+
         parent_provider = super().provider_bridge(hf_pretrained)  # type: ignore[misc]
+
         provider_kwargs = dataclasses.asdict(parent_provider)
+
         provider_kwargs["heterogeneous_layers_config_encoded_json"] = (
             self._build_heterogeneous_config_json(hf_pretrained.config)
         )
@@ -75,7 +78,9 @@ class HeterogeneousBridgeMixin:
 
     def _build_heterogeneous_config_json(self, hf_config) -> str:
         """Build heterogeneous layers config JSON from HF config."""
+
         hf_config_dict = json.loads(hf_config.to_json_string())
+
         mcore_block_configs = [
             self._convert_block_config(block) for block in hf_config_dict["block_configs"]
         ]
