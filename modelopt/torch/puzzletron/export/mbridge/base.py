@@ -119,25 +119,32 @@ class HeterogeneousBridgeMixin:
 
     @classmethod
     def megatron_to_hf_config(cls, provider: GPTModelProvider) -> dict:
-        """Convert Megatron GPTModelProvider config to HuggingFace config dict.
-
-        This method is not yet implemented for AnyModel bridges, as it requires
-        handling heterogeneous layer configurations (block_configs) which is
-        more complex than standard model conversion.
-
-        Args:
-            provider: GPTModelProvider with AnyModel configuration
-
-        Returns:
-            Dictionary of HuggingFace config parameters
-
-        Raises:
-            NotImplementedError: This method is not yet implemented for AnyModel bridges
-        """
         raise NotImplementedError(
             "megatron_to_hf_config() not yet implemented for AnyModel bridges. "
             "AnyModel bridges require special handling for heterogeneous layer configurations."
         )
+
+    def _build_heterogeneous_config_json(self, hf_config) -> str:
+        """Build the heterogeneous layers config JSON from HF config.
+
+        Args:
+            hf_config: HuggingFace model configuration
+
+        Returns:
+            JSON string for heterogeneous_layers_config_encoded_json
+        """
+        num_query_groups = self._extract_num_query_groups(hf_config)
+
+        hf_config_dict = json.loads(hf_config.to_json_string())
+        mcore_block_configs = [
+            self._convert_block_config(block, hf_config, num_query_groups)
+            for block in hf_config_dict.get("block_configs", [])
+        ]
+
+        # Build MCore format JSON (only block_configs, rope_scaling is handled by provider fields)
+        mcore_config = {"block_configs": mcore_block_configs}
+
+        return json.dumps(mcore_config, ensure_ascii=False)
 
     def _extract_num_query_groups(self, hf_config) -> int | None:
         """
@@ -233,25 +240,3 @@ class HeterogeneousBridgeMixin:
             ffn_config["ffn_hidden_size"] = ffn_config.pop("intermediate_size")
 
         return ffn_config
-
-    def _build_heterogeneous_config_json(self, hf_config) -> str:
-        """Build the heterogeneous layers config JSON from HF config.
-
-        Args:
-            hf_config: HuggingFace model configuration
-
-        Returns:
-            JSON string for heterogeneous_layers_config_encoded_json
-        """
-        num_query_groups = self._extract_num_query_groups(hf_config)
-
-        hf_config_dict = json.loads(hf_config.to_json_string())
-        mcore_block_configs = [
-            self._convert_block_config(block, hf_config, num_query_groups)
-            for block in hf_config_dict.get("block_configs", [])
-        ]
-
-        # Build MCore format JSON (only block_configs, rope_scaling is handled by provider fields)
-        mcore_config = {"block_configs": mcore_block_configs}
-
-        return json.dumps(mcore_config, ensure_ascii=False)
