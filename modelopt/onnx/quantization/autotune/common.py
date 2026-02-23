@@ -18,7 +18,7 @@
 import hashlib
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import onnx_graphsurgeon as gs
 import yaml
@@ -30,6 +30,9 @@ from modelopt.onnx.quantization.autotune.insertion_points import (
     NodeInputInsertionPoint,
     ResolvedInsertionPoint,
 )
+
+if TYPE_CHECKING:
+    from modelopt.onnx.quantization.autotune.region_pattern import RegionPattern
 
 
 class AutotunerError(Exception):
@@ -622,35 +625,31 @@ class PatternCache:
                 scheme.node_inputs.append(point)
         # Analyze region boundaries (for COMPOSITE regions)
         if region.type == RegionType.COMPOSITE:
-            for point in full_insertion_scheme.child_region_inputs:
+            for child_point in full_insertion_scheme.child_region_inputs:
                 temp_scheme = InsertionScheme(
                     node_inputs=[],
-                    child_region_inputs=[point],
+                    child_region_inputs=[child_point],
                     region_outputs=[],
                     latency_ms=float("inf"),
                     error=False,
                 )
-                temp_insertion_points: list[ResolvedInsertionPoint] = pattern.matches(
-                    region, graph, temp_scheme
-                )
+                temp_insertion_points = pattern.matches(region, graph, temp_scheme)
                 temp_tensor_names = {tensor.tensor_name for tensor in temp_insertion_points}
                 if len(temp_tensor_names.intersection(quantized_tensors)) > 0:
-                    scheme.child_region_inputs.append(point)
+                    scheme.child_region_inputs.append(child_point)
         # Analyze region outputs
-        for point in full_insertion_scheme.region_outputs:
+        for output_point in full_insertion_scheme.region_outputs:
             temp_scheme = InsertionScheme(
                 node_inputs=[],
                 child_region_inputs=[],
-                region_outputs=[point],
+                region_outputs=[output_point],
                 latency_ms=float("inf"),
                 error=False,
             )
-            temp_insertion_points: list[ResolvedInsertionPoint] = pattern.matches(
-                region, graph, temp_scheme
-            )
+            temp_insertion_points = pattern.matches(region, graph, temp_scheme)
             temp_tensor_names = {tensor.tensor_name for tensor in temp_insertion_points}
             if len(temp_tensor_names.intersection(quantized_tensors)) > 0:
-                scheme.region_outputs.append(point)
+                scheme.region_outputs.append(output_point)
         # Add pattern and scheme to pattern cache
         pattern_schemes = PatternSchemes(pattern=pattern, schemes=[scheme])
         self.add_pattern_schemes(pattern_schemes)
